@@ -22,8 +22,11 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
+      # =====================================================
+      # Detect which base image was updated
+      # =====================================================
       - name: Detect changed image
         id: detect
         run: |
@@ -35,6 +38,19 @@ jobs:
             echo "label=📦 alpine" >> $GITHUB_OUTPUT
           fi
 
+      # =====================================================
+      # Read base image from Dockerfile (including digest)
+      # =====================================================
+      - name: Read base image from Dockerfile
+        id: base
+        run: |
+          IMAGE_LINE=$(grep -i "FROM.*${{ steps.detect.outputs.image }}" Dockerfile | head -1 | awk '{print $2}')
+          echo "image_ref=${IMAGE_LINE}" >> $GITHUB_OUTPUT
+          echo "Base image: ${IMAGE_LINE}"
+
+      # =====================================================
+      # Login to GitHub Container Registry (ghcr.io)
+      # =====================================================
       - name: Log in to ghcr.io
         uses: docker/login-action@v4
         with:
@@ -42,6 +58,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # =====================================================
+      # Build with docker/build-push-action
+      # pull: true → equivalent to docker build --pull
+      # Dockerfile is NOT modified
+      # =====================================================
       - name: Build and push with latest ${{ steps.detect.outputs.image }}
         id: build
         uses: docker/build-push-action@v7
@@ -51,11 +72,15 @@ jobs:
           pull: true
           tags: ghcr.io/${{ github.repository }}:latest
 
+      # =====================================================
+      # Close PR without merging on success
+      # On failure: leave PR open, add comment only
+      # =====================================================
       - name: Close PR without merging
         if: success()
         run: |
           gh pr close ${{ github.event.pull_request.number }} \
-          --comment "✅ Build with new \`${{ steps.detect.outputs.image }}\` successful. PR closed — Dockerfile remains unchanged."
+            --comment "✅ Build with new \`${{ steps.detect.outputs.image }}\` successful. PR closed — Dockerfile remains unchanged."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -63,10 +88,14 @@ jobs:
         if: failure()
         run: |
           gh pr comment ${{ github.event.pull_request.number }} \
-          --body "❌ Build failed — please check the [Actions Log](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."
+            --body "❌ Build failed — please check the [Actions Log](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}). PR remains open for investigation."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # =====================================================
+      # Update Dependency Dashboard comment
+      # Delete old comment, write new one
+      # =====================================================
       - name: Update Dependency Dashboard comment
         if: always()
         run: |
@@ -93,13 +122,16 @@ jobs:
 
           if [ "${{ steps.build.outcome }}" == "success" ]; then
             STATUS="✅ Success"
+            FOOTER="> PR closed without merge — Dockerfile remains unchanged."
           else
             STATUS="❌ Failed"
+            FOOTER="> Build failed — PR remains open for investigation."
           fi
 
           DATE=$(date '+%Y-%m-%d %H:%M UTC')
           DIGEST="${{ steps.build.outputs.digest }}"
-          IMAGE="ghcr.io/${{ github.repository }}:latest"
+          OUTPUT_IMAGE="ghcr.io/${{ github.repository }}:latest"
+          BASE_IMAGE="${{ steps.base.outputs.image_ref }}"
           PR_NUM="${{ github.event.pull_request.number }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           LABEL="${{ steps.detect.outputs.label }}"
@@ -110,10 +142,11 @@ jobs:
           | **Date** | ${DATE} |
           | **Status** | ${STATUS} |
           | **Triggered by** | PR #${PR_NUM} |
-          | **Image** | \`${IMAGE}\` |
-          | **Digest** | \`${DIGEST}\` |
+          | **Base image used** | \`${BASE_IMAGE}\` |
+          | **Output image** | \`${OUTPUT_IMAGE}\` |
+          | **Output digest** | \`${DIGEST}\` |
           | **Workflow** | [View run](${RUN_URL}) |
 
-          > PR closed without merge — Dockerfile remains unchanged."
+          ${FOOTER}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
