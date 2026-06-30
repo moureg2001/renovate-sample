@@ -32,10 +32,12 @@ jobs:
         run: |
           if echo "${{ github.head_ref }}" | grep -qi "golang\|go-lang"; then
             echo "image=golang" >> $GITHUB_OUTPUT
-            echo "label=🔧 golang" >> $GITHUB_OUTPUT
+            echo "label=golang" >> $GITHUB_OUTPUT
+            echo "emoji=🔧" >> $GITHUB_OUTPUT
           else
             echo "image=alpine" >> $GITHUB_OUTPUT
-            echo "label=📦 alpine" >> $GITHUB_OUTPUT
+            echo "label=alpine" >> $GITHUB_OUTPUT
+            echo "emoji=📦" >> $GITHUB_OUTPUT
           fi
 
       # =====================================================
@@ -94,7 +96,8 @@ jobs:
 
       # =====================================================
       # Update Dependency Dashboard comment
-      # Delete old comment, write new one
+      # Stable marker: <!-- renovate-build-comment: IMAGE -->
+      # Used to reliably find and delete old comment
       # =====================================================
       - name: Update Dependency Dashboard comment
         if: always()
@@ -111,12 +114,17 @@ jobs:
             exit 0
           fi
 
+          echo "Dependency Dashboard issue: #${ISSUE_NUMBER}"
+
+          # Find and delete old comment using stable hidden marker
+          MARKER="<!-- renovate-build-comment: ${{ steps.detect.outputs.image }} -->"
           OLD_COMMENT_ID=$(gh issue comment list "$ISSUE_NUMBER" \
             --json id,body \
-            --jq ".[] | select(.body | contains(\"${{ steps.detect.outputs.label }}\")) | .id" \
+            --jq ".[] | select(.body | contains(\"<!-- renovate-build-comment: ${{ steps.detect.outputs.image }} -->\")) | .id" \
             | head -1)
 
           if [ -n "$OLD_COMMENT_ID" ]; then
+            echo "Deleting old comment: ${OLD_COMMENT_ID}"
             gh issue comment delete "$OLD_COMMENT_ID" --yes || true
           fi
 
@@ -134,9 +142,11 @@ jobs:
           BASE_IMAGE="${{ steps.base.outputs.image_ref }}"
           PR_NUM="${{ github.event.pull_request.number }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          EMOJI="${{ steps.detect.outputs.emoji }}"
           LABEL="${{ steps.detect.outputs.label }}"
 
-          gh issue comment "$ISSUE_NUMBER" --body "## ${LABEL} — Last Build
+          gh issue comment "$ISSUE_NUMBER" --body "<!-- renovate-build-comment: ${LABEL} -->
+          ## ${EMOJI} ${LABEL} — Last Build
           | | |
           |---|---|
           | **Date** | ${DATE} |
