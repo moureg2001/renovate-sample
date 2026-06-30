@@ -1,0 +1,119 @@
+name: Rebuild base images
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'Dockerfile'
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    if: |
+      github.actor == 'renovate[bot]' &&
+      (contains(github.head_ref, 'golang') ||
+       contains(github.head_ref, 'go-lang') ||
+       contains(github.head_ref, 'alpine'))
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect changed image
+        id: detect
+        run: |
+          if echo "${{ github.head_ref }}" | grep -qi "golang\|go-lang"; then
+            echo "image=golang" >> $GITHUB_OUTPUT
+            echo "label=🔧 golang" >> $GITHUB_OUTPUT
+          else
+            echo "image=alpine" >> $GITHUB_OUTPUT
+            echo "label=📦 alpine" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push with latest ${{ steps.detect.outputs.image }}
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          pull: true
+          tags: ghcr.io/${{ github.repository }}:latest
+
+      - name: Close PR without merging
+        if: success()
+        run: |
+          gh pr close ${{ github.event.pull_request.number }} \
+            --comment "✅ Build with new \`${{ steps.detect.outputs.image }}\` successful. PR closed — Dockerfile remains unchanged."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Close PR on failure
+        if: failure()
+        run: |
+          gh pr close ${{ github.event.pull_request.number }} \
+            --comment "❌ Build failed — please check the Actions Log."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Dependency Dashboard comment
+        if: always()
+        run: |
+          ISSUE_NUMBER=$(gh issue list \
+            --search "Dependency Dashboard in:title" \
+            --state open \
+            --json number,title \
+            --jq '.[] | select(.title == "Dependency Dashboard") | .number' \
+            | head -1)
+
+          if [ -z "$ISSUE_NUMBER" ]; then
+            echo "Dependency Dashboard issue not found — skipping"
+            exit 0
+          fi
+
+          OLD_COMMENT_ID=$(gh issue comment list "$ISSUE_NUMBER" \
+            --json id,body \
+            --jq ".[] | select(.body | contains(\"${{ steps.detect.outputs.label }}\")) | .id" \
+            | head -1)
+
+          if [ -n "$OLD_COMMENT_ID" ]; then
+            gh issue comment delete "$OLD_COMMENT_ID" --yes || true
+          fi
+
+          if [ "${{ steps.build.outcome }}" == "success" ]; then
+            STATUS="✅ Success"
+          else
+            STATUS="❌ Failed"
+          fi
+
+          DATE=$(date '+%Y-%m-%d %H:%M UTC')
+          DIGEST="${{ steps.build.outputs.digest }}"
+          IMAGE="ghcr.io/${{ github.repository }}:latest"
+          PR_NUM="${{ github.event.pull_request.number }}"
+          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          LABEL="${{ steps.detect.outputs.label }}"
+
+          gh issue comment "$ISSUE_NUMBER" --body "## ${LABEL} — Last Build
+          | | |
+          |---|---|
+          | **Date** | ${DATE} |
+          | **Status** | ${STATUS} |
+          | **Triggered by** | PR #${PR_NUM} |
+          | **Image** | \`${IMAGE}\` |
+          | **Digest** | \`${DIGEST}\` |
+          | **Workflow** | [View run](${RUN_URL}) |
+
+          > PR closed without merge — Dockerfile remains unchanged."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
