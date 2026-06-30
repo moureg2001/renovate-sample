@@ -9,11 +9,10 @@ on:
 jobs:
   rebuild:
     runs-on: ubuntu-latest
+    # Only for Renovate digest PRs — branch contains 'base-images' (grouped)
     if: |
       github.actor == 'renovate[bot]' &&
-      (contains(github.head_ref, 'golang') ||
-       contains(github.head_ref, 'go-lang') ||
-       contains(github.head_ref, 'alpine'))
+      contains(github.head_ref, 'base-images')
     permissions:
       contents: read
       pull-requests: write
@@ -22,33 +21,17 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
       # =====================================================
-      # Detect which base image was updated
+      # Read all base images from Dockerfile
       # =====================================================
-      - name: Detect changed image
-        id: detect
-        run: |
-          if echo "${{ github.head_ref }}" | grep -qi "golang\|go-lang"; then
-            echo "image=golang" >> $GITHUB_OUTPUT
-            echo "label=golang" >> $GITHUB_OUTPUT
-            echo "emoji=🔧" >> $GITHUB_OUTPUT
-          else
-            echo "image=alpine" >> $GITHUB_OUTPUT
-            echo "label=alpine" >> $GITHUB_OUTPUT
-            echo "emoji=📦" >> $GITHUB_OUTPUT
-          fi
-
-      # =====================================================
-      # Read base image from Dockerfile (including digest)
-      # =====================================================
-      - name: Read base image from Dockerfile
+      - name: Read base images from Dockerfile
         id: base
         run: |
-          IMAGE_LINE=$(grep -i "FROM.*${{ steps.detect.outputs.image }}" Dockerfile | head -1 | awk '{print $2}')
-          echo "image_ref=${IMAGE_LINE}" >> $GITHUB_OUTPUT
-          echo "Base image: ${IMAGE_LINE}"
+          IMAGES=$(grep -i "^FROM" Dockerfile | awk '{print $2}' | tr '\n' ', ' | sed 's/,$//')
+          echo "images=${IMAGES}" >> $GITHUB_OUTPUT
+          echo "Base images: ${IMAGES}"
 
       # =====================================================
       # Login to GitHub Container Registry (ghcr.io)
@@ -62,10 +45,10 @@ jobs:
 
       # =====================================================
       # Build with docker/build-push-action
-      # pull: true → equivalent to docker build --pull
+      # pull: true → pulls latest base images
       # Dockerfile is NOT modified
       # =====================================================
-      - name: Build and push with latest ${{ steps.detect.outputs.image }}
+      - name: Build and push
         id: build
         uses: docker/build-push-action@v7
         with:
@@ -82,7 +65,7 @@ jobs:
         if: success()
         run: |
           gh pr close ${{ github.event.pull_request.number }} \
-            --comment "✅ Build with new \`${{ steps.detect.outputs.image }}\` successful. PR closed — Dockerfile remains unchanged."
+            --comment "✅ Build successful with updated base images. PR closed — Dockerfile remains unchanged."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -113,9 +96,9 @@ jobs:
 
           echo "Dependency Dashboard issue: #${ISSUE_NUMBER}"
 
-          MARKER="renovate-build-marker-${{ steps.detect.outputs.image }}"
+          MARKER="renovate-build-marker-base-images"
 
-          # Find old comment using gh api + startswith for reliable matching
+          # Find and delete old comment using gh api + startswith
           OLD_COMMENT_ID=$(gh api \
             repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments \
             --paginate \
@@ -140,23 +123,21 @@ jobs:
           DATE=$(date '+%Y-%m-%d %H:%M UTC')
           DIGEST="${{ steps.build.outputs.digest }}"
           OUTPUT_IMAGE="ghcr.io/${{ github.repository }}:latest"
-          BASE_IMAGE="${{ steps.base.outputs.image_ref }}"
+          BASE_IMAGES="${{ steps.base.outputs.images }}"
           PR_NUM="${{ github.event.pull_request.number }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          EMOJI="${{ steps.detect.outputs.emoji }}"
-          LABEL="${{ steps.detect.outputs.label }}"
 
           gh api \
             repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments \
             -X POST \
             -f body="${MARKER}
-            ## ${EMOJI} ${LABEL} — Last Build
+            ## 🐳 Base Images — Last Build
             | | |
             |---|---|
             | **Date** | ${DATE} |
             | **Status** | ${STATUS} |
             | **Triggered by** | PR #${PR_NUM} |
-            | **Base image used** | \`${BASE_IMAGE}\` |
+            | **Base images used** | \`${BASE_IMAGES}\` |
             | **Output image** | \`${OUTPUT_IMAGE}\` |
             | **Output digest** | \`${DIGEST}\` |
             | **Workflow** | [View run](${RUN_URL}) |
