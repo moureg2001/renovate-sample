@@ -1,0 +1,58 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "timezone": "Europe/Berlin",
+  "dependencyDashboard": true,
+  "ignoreUnmergedBranches": true,
+  "prHourlyLimit": 0,
+  "prConcurrentLimit": 0,
+
+  "packageRules": [
+    // =====================================================
+    // golang builder image: Digest-Update
+    // Dashboard-Approval → PR triggers Build → PR closed
+    // =====================================================
+    {
+      "description": "golang: Digest-Update → Dashboard-Approval → PR triggers Build → PR closed",
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["golang"],
+      "matchUpdateTypes": ["digest", "pinDigest"],
+      "pinDigests": true,
+      "dependencyDashboardApproval": true,
+      "automerge": false,
+      "recreateWhen": "always",
+      "labels": ["dependencies", "docker", "go-builder"]
+    },
+    {
+      "description": "golang: version update → manual review",
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["golang"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "automerge": false,
+      "labels": ["dependencies", "docker", "go-builder"]
+    },
+    // =====================================================
+    // alpine base image: Digest-Update
+    // Dashboard-Approval → PR triggers Build → PR closed
+    // =====================================================
+    {
+      "description": "alpine: Digest-Update → Dashboard-Approval → PR triggers Build → PR closed",
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["alpine"],
+      "matchUpdateTypes": ["digest", "pinDigest"],
+      "pinDigests": true,
+      "dependencyDashboardApproval": true,
+      "automerge": false,
+      "recreateWhen": "always",
+      "labels": ["dependencies", "docker", "base-image"]
+    },
+    {
+      "description": "alpine: version update → manual review",
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["alpine"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "automerge": false,
+      "labels": ["dependencies", "docker", "base-image"]
+    }
+  ]
+}
