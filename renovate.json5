@@ -9,7 +9,7 @@
   "packageRules": [
     // =====================================================
     // Base images: grouped in one PR
-    // Dashboard-Approval → PR triggers Build → PR closed
+    // Dashboard-Approval -> PR triggers Build -> PR closed
     // =====================================================
     {
       "description": "All base images: grouped Digest-Update → one PR → one Build",
