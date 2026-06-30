@@ -3,6 +3,6 @@ WORKDIR /app
 COPY . .
 RUN go build -o app .
 
-FROM alpine:3.21
+FROM alpine:3.24
 COPY --from=builder /app/app /app/app
 CMD ["/app/app"]
