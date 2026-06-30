@@ -55,15 +55,15 @@ jobs:
         if: success()
         run: |
           gh pr close ${{ github.event.pull_request.number }} \
-            --comment "✅ Build with new \`${{ steps.detect.outputs.image }}\` successful. PR closed — Dockerfile remains unchanged."
+          --comment "✅ Build with new \`${{ steps.detect.outputs.image }}\` successful. PR closed — Dockerfile remains unchanged."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Close PR on failure
+      - name: Comment on failure
         if: failure()
         run: |
-          gh pr close ${{ github.event.pull_request.number }} \
-            --comment "❌ Build failed — please check the Actions Log."
+          gh pr comment ${{ github.event.pull_request.number }} \
+          --body "❌ Build failed — please check the [Actions Log](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
