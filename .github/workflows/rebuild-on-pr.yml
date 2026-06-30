@@ -96,16 +96,13 @@ jobs:
 
       # =====================================================
       # Update Dependency Dashboard comment
-      # Stable marker: <!-- renovate-build-comment: IMAGE -->
-      # Used to reliably find and delete old comment
+      # Uses gh api + startswith for reliable marker detection
       # =====================================================
       - name: Update Dependency Dashboard comment
         if: always()
         run: |
-          ISSUE_NUMBER=$(gh issue list \
-            --search "Dependency Dashboard in:title" \
-            --state open \
-            --json number,title \
+          ISSUE_NUMBER=$(gh api \
+            repos/${{ github.repository }}/issues \
             --jq '.[] | select(.title == "Dependency Dashboard") | .number' \
             | head -1)
 
@@ -116,16 +113,20 @@ jobs:
 
           echo "Dependency Dashboard issue: #${ISSUE_NUMBER}"
 
-          # Find and delete old comment using stable hidden marker
-          MARKER="<!-- renovate-build-comment: ${{ steps.detect.outputs.image }} -->"
-          OLD_COMMENT_ID=$(gh issue comment list "$ISSUE_NUMBER" \
-            --json id,body \
-            --jq ".[] | select(.body | contains(\"<!-- renovate-build-comment: ${{ steps.detect.outputs.image }} -->\")) | .id" \
+          MARKER="renovate-build-marker-${{ steps.detect.outputs.image }}"
+
+          # Find old comment using gh api + startswith for reliable matching
+          OLD_COMMENT_ID=$(gh api \
+            repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments \
+            --paginate \
+            --jq ".[] | select(.body | startswith(\"${MARKER}\")) | .id" \
             | head -1)
 
           if [ -n "$OLD_COMMENT_ID" ]; then
             echo "Deleting old comment: ${OLD_COMMENT_ID}"
-            gh issue comment delete "$OLD_COMMENT_ID" --yes || true
+            gh api \
+              repos/${{ github.repository }}/issues/comments/${OLD_COMMENT_ID} \
+              -X DELETE
           fi
 
           if [ "${{ steps.build.outcome }}" == "success" ]; then
@@ -145,18 +146,21 @@ jobs:
           EMOJI="${{ steps.detect.outputs.emoji }}"
           LABEL="${{ steps.detect.outputs.label }}"
 
-          gh issue comment "$ISSUE_NUMBER" --body "<!-- renovate-build-comment: ${LABEL} -->
-          ## ${EMOJI} ${LABEL} — Last Build
-          | | |
-          |---|---|
-          | **Date** | ${DATE} |
-          | **Status** | ${STATUS} |
-          | **Triggered by** | PR #${PR_NUM} |
-          | **Base image used** | \`${BASE_IMAGE}\` |
-          | **Output image** | \`${OUTPUT_IMAGE}\` |
-          | **Output digest** | \`${DIGEST}\` |
-          | **Workflow** | [View run](${RUN_URL}) |
+          gh api \
+            repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments \
+            -X POST \
+            -f body="${MARKER}
+            ## ${EMOJI} ${LABEL} — Last Build
+            | | |
+            |---|---|
+            | **Date** | ${DATE} |
+            | **Status** | ${STATUS} |
+            | **Triggered by** | PR #${PR_NUM} |
+            | **Base image used** | \`${BASE_IMAGE}\` |
+            | **Output image** | \`${OUTPUT_IMAGE}\` |
+            | **Output digest** | \`${DIGEST}\` |
+            | **Workflow** | [View run](${RUN_URL}) |
 
-          ${FOOTER}"
+            ${FOOTER}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
