@@ -9,10 +9,10 @@ on:
 jobs:
   rebuild:
     runs-on: ubuntu-latest
-    # Only for Renovate digest PRs — branch contains 'base-images' (grouped)
+    # Trigger on Renovate PRs with label 'base-image'
     if: |
       github.actor == 'renovate[bot]' &&
-      contains(github.head_ref, 'base-images')
+      contains(join(github.event.pull_request.labels.*.name, ','), 'base-image')
     permissions:
       contents: read
       pull-requests: write
@@ -21,11 +21,8 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
 
-      # =====================================================
-      # Read all base images from Dockerfile
-      # =====================================================
       - name: Read base images from Dockerfile
         id: base
         run: |
@@ -33,9 +30,6 @@ jobs:
           echo "images=${IMAGES}" >> $GITHUB_OUTPUT
           echo "Base images: ${IMAGES}"
 
-      # =====================================================
-      # Login to GitHub Container Registry (ghcr.io)
-      # =====================================================
       - name: Log in to ghcr.io
         uses: docker/login-action@v4
         with:
@@ -43,11 +37,6 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # =====================================================
-      # Build with docker/build-push-action
-      # pull: true → pulls latest base images
-      # Dockerfile is NOT modified
-      # =====================================================
       - name: Build and push
         id: build
         uses: docker/build-push-action@v7
@@ -57,10 +46,6 @@ jobs:
           pull: true
           tags: ghcr.io/${{ github.repository }}:latest
 
-      # =====================================================
-      # Close PR without merging on success
-      # On failure: leave PR open, add comment only
-      # =====================================================
       - name: Close PR without merging
         if: success()
         run: |
@@ -77,10 +62,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # =====================================================
-      # Update Dependency Dashboard comment
-      # Uses gh api + startswith for reliable marker detection
-      # =====================================================
       - name: Update Dependency Dashboard comment
         if: always()
         run: |
@@ -98,7 +79,6 @@ jobs:
 
           MARKER="renovate-build-marker-base-images"
 
-          # Find and delete old comment using gh api + startswith
           OLD_COMMENT_ID=$(gh api \
             repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments \
             --paginate \
@@ -107,9 +87,7 @@ jobs:
 
           if [ -n "$OLD_COMMENT_ID" ]; then
             echo "Deleting old comment: ${OLD_COMMENT_ID}"
-            gh api \
-              repos/${{ github.repository }}/issues/comments/${OLD_COMMENT_ID} \
-              -X DELETE
+            gh api repos/${{ github.repository }}/issues/comments/${OLD_COMMENT_ID} -X DELETE
           fi
 
           if [ "${{ steps.build.outcome }}" == "success" ]; then
@@ -127,8 +105,7 @@ jobs:
           PR_NUM="${{ github.event.pull_request.number }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
 
-          gh api \
-            repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments \
+          gh api repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments \
             -X POST \
             -f body="${MARKER}
             ## 🐳 Base Images — Last Build
