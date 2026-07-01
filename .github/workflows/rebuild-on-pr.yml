@@ -1,4 +1,4 @@
-name: Rebuild base images
+name: Rebuild on Renovate base image PR
 
 on:
   pull_request:
@@ -8,36 +8,20 @@ on:
 
 jobs:
   rebuild:
-    runs-on: ubuntu-latest
+    runs-on: linux
     if: |
       github.actor == 'renovate[bot]' &&
       (contains(github.head_ref, 'golang') ||
        contains(github.head_ref, 'go-lang') ||
-       contains(github.head_ref, 'alpine') ||
        contains(github.head_ref, 'pin-dependencies'))
     permissions:
       contents: read
       pull-requests: write
       issues: write
-      packages: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Detect changed image
-        id: detect
-        run: |
-          if echo "${{ github.head_ref }}" | grep -qi "golang\|go-lang"; then
-            echo "image=golang" >> $GITHUB_OUTPUT
-            echo "emoji=🔧" >> $GITHUB_OUTPUT
-          elif echo "${{ github.head_ref }}" | grep -qi "alpine"; then
-            echo "image=alpine" >> $GITHUB_OUTPUT
-            echo "emoji=📦" >> $GITHUB_OUTPUT
-          else
-            echo "image=base-images" >> $GITHUB_OUTPUT
-            echo "emoji=🐳" >> $GITHUB_OUTPUT
-          fi
 
       - name: Read base images from Dockerfile
         id: base
@@ -46,12 +30,12 @@ jobs:
           echo "images=${IMAGES}" >> $GITHUB_OUTPUT
           echo "Base images: ${IMAGES}"
 
-      - name: Log in to ghcr.io
+      - name: Log in to Harbor registry
         uses: docker/login-action@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          registry: registry.idst.ibaintern.de
+          username: ${{ secrets.REGISTRY_USERNAME }}
+          password: ${{ secrets.REGISTRY_PASSWORD }}
 
       - name: Build and push
         id: build
@@ -60,15 +44,18 @@ jobs:
           context: .
           push: true
           pull: true
-          tags: ghcr.io/${{ github.repository }}:latest
+          tags: registry.idst.ibaintern.de/public/ibi/ci-s3-http-server:latest
+          cache-from: type=registry,ref=registry.idst.ibaintern.de/public/ibi/ci-s3-http-server:cache
+          cache-to: type=registry,ref=registry.idst.ibaintern.de/public/ibi/ci-s3-http-server:cache,mode=max
 
       - name: Close PR without merging
         if: success()
         run: |
           gh pr close ${{ github.event.pull_request.number }} \
-            --comment "✅ Build successful with new \`${{ steps.detect.outputs.image }}\` digest. PR closed — Dockerfile remains unchanged."
+            --comment "✅ Build successful with new golang-builder digest. PR closed — Dockerfile remains unchanged."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_HOST: ${{ github.server_url }}
 
       - name: Comment on failure
         if: failure()
@@ -77,6 +64,7 @@ jobs:
             --body "❌ Build failed — please check the [Actions Log](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}). PR remains open for investigation."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_HOST: ${{ github.server_url }}
 
       - name: Update Dependency Dashboard comment
         if: always()
@@ -91,7 +79,7 @@ jobs:
             exit 0
           fi
 
-          MARKER="renovate-build-marker-${{ steps.detect.outputs.image }}"
+          MARKER="renovate-build-marker-golang-builder"
 
           OLD_COMMENT_ID=$(gh api \
             repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments \
@@ -114,17 +102,15 @@ jobs:
 
           DATE=$(date '+%Y-%m-%d %H:%M UTC')
           DIGEST="${{ steps.build.outputs.digest }}"
-          OUTPUT_IMAGE="ghcr.io/${{ github.repository }}:latest"
+          OUTPUT_IMAGE="registry.idst.ibaintern.de/public/ibi/ci-s3-http-server:latest"
           BASE_IMAGES="${{ steps.base.outputs.images }}"
           PR_NUM="${{ github.event.pull_request.number }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          EMOJI="${{ steps.detect.outputs.emoji }}"
-          IMAGE="${{ steps.detect.outputs.image }}"
 
           gh api repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments \
             -X POST \
             -f body="${MARKER}
-            ## ${EMOJI} ${IMAGE} — Last Build
+            ## 🔧 golang-builder — Last Build
             | | |
             |---|---|
             | **Date** | ${DATE} |
@@ -138,3 +124,4 @@ jobs:
             ${FOOTER}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_HOST: ${{ github.server_url }}
