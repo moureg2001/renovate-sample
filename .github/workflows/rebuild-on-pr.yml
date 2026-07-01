@@ -14,8 +14,7 @@ jobs:
       (contains(github.head_ref, 'golang') ||
        contains(github.head_ref, 'go-lang') ||
        contains(github.head_ref, 'alpine') ||
-       contains(github.head_ref, 'pin-dependencies') ||
-       contains(github.head_ref, 'base-images'))
+       contains(github.head_ref, 'pin-dependencies'))
     permissions:
       contents: read
       pull-requests: write
@@ -24,7 +23,21 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v7
+        uses: actions/checkout@v4
+
+      - name: Detect changed image
+        id: detect
+        run: |
+          if echo "${{ github.head_ref }}" | grep -qi "golang\|go-lang"; then
+            echo "image=golang" >> $GITHUB_OUTPUT
+            echo "emoji=🔧" >> $GITHUB_OUTPUT
+          elif echo "${{ github.head_ref }}" | grep -qi "alpine"; then
+            echo "image=alpine" >> $GITHUB_OUTPUT
+            echo "emoji=📦" >> $GITHUB_OUTPUT
+          else
+            echo "image=base-images" >> $GITHUB_OUTPUT
+            echo "emoji=🐳" >> $GITHUB_OUTPUT
+          fi
 
       - name: Read base images from Dockerfile
         id: base
@@ -53,7 +66,7 @@ jobs:
         if: success()
         run: |
           gh pr close ${{ github.event.pull_request.number }} \
-            --comment "✅ Build successful with updated base images. PR closed — Dockerfile remains unchanged."
+            --comment "✅ Build successful with new \`${{ steps.detect.outputs.image }}\` digest. PR closed — Dockerfile remains unchanged."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -78,9 +91,7 @@ jobs:
             exit 0
           fi
 
-          echo "Dependency Dashboard issue: #${ISSUE_NUMBER}"
-
-          MARKER="renovate-build-marker-base-images"
+          MARKER="renovate-build-marker-${{ steps.detect.outputs.image }}"
 
           OLD_COMMENT_ID=$(gh api \
             repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments \
@@ -107,11 +118,13 @@ jobs:
           BASE_IMAGES="${{ steps.base.outputs.images }}"
           PR_NUM="${{ github.event.pull_request.number }}"
           RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          EMOJI="${{ steps.detect.outputs.emoji }}"
+          IMAGE="${{ steps.detect.outputs.image }}"
 
           gh api repos/${{ github.repository }}/issues/${ISSUE_NUMBER}/comments \
             -X POST \
             -f body="${MARKER}
-            ## 🐳 Base Images — Last Build
+            ## ${EMOJI} ${IMAGE} — Last Build
             | | |
             |---|---|
             | **Date** | ${DATE} |
