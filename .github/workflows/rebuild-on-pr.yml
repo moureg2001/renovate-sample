@@ -9,10 +9,13 @@ on:
 jobs:
   rebuild:
     runs-on: ubuntu-latest
-    # Trigger on Renovate PRs with label 'base-image'
     if: |
       github.actor == 'renovate[bot]' &&
-      contains(join(github.event.pull_request.labels.*.name, ','), 'base-image')
+      (contains(github.head_ref, 'golang') ||
+       contains(github.head_ref, 'go-lang') ||
+       contains(github.head_ref, 'alpine') ||
+       contains(github.head_ref, 'pin-dependencies') ||
+       contains(github.head_ref, 'base-images'))
     permissions:
       contents: read
       pull-requests: write
