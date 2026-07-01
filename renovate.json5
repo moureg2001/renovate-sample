@@ -1,11 +1,38 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
+  "timezone": "Europe/Berlin",
   "dependencyDashboard": true,
+  "prHourlyLimit": 0,
+  "prConcurrentLimit": 0,
   "packageRules": [
     {
+      "description": "All base images: grouped Digest-Update → one PR → one Build",
       "matchManagers": ["dockerfile"],
-      "pinDigests": true
+      "matchPackageNames": ["golang", "alpine"],
+      "matchUpdateTypes": ["digest", "pinDigest"],
+      "groupName": "base images",
+      "pinDigests": true,
+      "dependencyDashboardApproval": true,
+      "automerge": false,
+      "recreateWhen": "always",
+      "labels": ["dependencies", "docker", "base-image"]
+    },
+    {
+      "description": "golang: version update → manual review",
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["golang"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "automerge": false,
+      "labels": ["dependencies", "docker", "go-builder"]
+    },
+    {
+      "description": "alpine: version update → manual review",
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["alpine"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "automerge": false,
+      "labels": ["dependencies", "docker", "base-image"]
     }
   ]
 }
