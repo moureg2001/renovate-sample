@@ -6,17 +6,28 @@
   "prHourlyLimit": 0,
   "prConcurrentLimit": 0,
   "packageRules": [
+    // Digest updates → PR triggers Build → PR closed
     {
-      "description": "All base images: grouped Digest-Update → one PR → one Build",
+      "description": "golang: Digest-Update → PR triggers Build → PR closed",
       "matchManagers": ["dockerfile"],
-      "matchPackageNames": ["golang", "alpine"],
+      "matchPackageNames": ["golang"],
       "matchUpdateTypes": ["digest", "pinDigest"],
-      "groupName": "base images",
+      "pinDigests": true,
+      "automerge": false,
+      "recreateWhen": "always",
+      "labels": ["dependencies", "docker", "go-builder"]
+    },
+    {
+      "description": "alpine: Digest-Update → PR triggers Build → PR closed",
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["alpine"],
+      "matchUpdateTypes": ["digest", "pinDigest"],
       "pinDigests": true,
       "automerge": false,
       "recreateWhen": "always",
       "labels": ["dependencies", "docker", "base-image"]
     },
+    // Version updates → manual review
     {
       "description": "golang: version update → manual review",
       "matchManagers": ["dockerfile"],
