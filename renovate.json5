@@ -13,7 +13,6 @@
       "matchUpdateTypes": ["digest", "pinDigest"],
       "groupName": "base images",
       "pinDigests": true,
-      "dependencyDashboardApproval": true,
       "automerge": false,
       "recreateWhen": "always",
       "labels": ["dependencies", "docker", "base-image"]
