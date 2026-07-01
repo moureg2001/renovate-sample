@@ -5,42 +5,80 @@
   "dependencyDashboard": true,
   "prHourlyLimit": 0,
   "prConcurrentLimit": 0,
-
   "packageRules": [
     // =====================================================
-    // Base images: grouped in one PR
-    // Dashboard-Approval → PR triggers Build → PR closed
+    // Go modules: manual review
     // =====================================================
     {
-      "description": "All base images: grouped Digest-Update → one PR → one Build",
-      "matchManagers": ["dockerfile"],
-      "matchPackageNames": ["golang", "alpine"],
-      "matchUpdateTypes": ["digest", "pinDigest"],
-      "groupName": "base images",
-      "pinDigests": true,
-      "dependencyDashboardApproval": true,
+      "description": "Go modules: manual review",
+      "matchManagers": ["gomod"],
+      "groupName": "go dependencies",
+      "postUpdateOptions": ["gomodTidy"],
       "automerge": false,
-      "recreateWhen": "always",
-      "labels": ["dependencies", "docker", "base-image"]
+      "labels": ["dependencies", "go"]
+    },
+    {
+      "description": "Go security updates: auto-merge",
+      "matchManagers": ["gomod"],
+      "matchCategories": ["security"],
+      "automerge": true,
+      "automergeType": "pr",
+      "labels": ["dependencies", "go", "security-vulnerability"]
+    },
+    {
+      "description": "minio-go: blocked until golang-builder:1.25-sles is available internally",
+      "matchPackageNames": ["github.com/minio/minio-go/v7"],
+      "allowedVersions": "< 7.0.99"
     },
     // =====================================================
-    // Version updates: separate PRs, manual review
+    // GitHub Actions
     // =====================================================
     {
-      "description": "golang: version update → manual review",
+      "description": "GitHub Actions: major → manual review",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "github-actions"]
+    },
+    {
+      "description": "GitHub Actions: minor/patch/digest → auto-merge",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "automerge": true,
+      "automergeType": "pr",
+      "labels": ["dependencies", "github-actions"]
+    },
+    // =====================================================
+    // golang-builder: Digest-Update → PR triggers Build → PR closed
+    // Version update (1.24 → 1.25): manual review
+    // =====================================================
+    {
+      "description": "golang-builder: digest update → PR triggers Build → PR closed",
       "matchManagers": ["dockerfile"],
-      "matchPackageNames": ["golang"],
+      "matchPackageNames": ["registry.idst.ibaintern.de/public/ibi/golang-builder"],
+      "matchUpdateTypes": ["digest", "pinDigest"],
+      "pinDigests": true,
+      "automerge": false,
+      "recreateWhen": "always",
+      "labels": ["dependencies", "docker", "go-builder"]
+    },
+    {
+      "description": "golang-builder: version update (1.24 → 1.25) → manual review",
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["registry.idst.ibaintern.de/public/ibi/golang-builder"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "automerge": false,
       "labels": ["dependencies", "docker", "go-builder"]
     },
+    // =====================================================
+    // base:1-sles: disabled — updated via scheduled rebuild
+    // (Manfred's requirement: Dockerfile must never be modified)
+    // =====================================================
     {
-      "description": "alpine: version update → manual review",
+      "description": "base:1-sles: disabled — updated via scheduled docker build --pull",
       "matchManagers": ["dockerfile"],
-      "matchPackageNames": ["alpine"],
-      "matchUpdateTypes": ["major", "minor", "patch"],
-      "automerge": false,
-      "labels": ["dependencies", "docker", "base-image"]
+      "matchPackageNames": ["registry.idst.ibaintern.de/public/ibi/base"],
+      "enabled": false
     }
   ]
 }
