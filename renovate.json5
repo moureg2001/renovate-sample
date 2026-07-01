@@ -5,80 +5,42 @@
   "dependencyDashboard": true,
   "prHourlyLimit": 0,
   "prConcurrentLimit": 0,
+
   "packageRules": [
     // =====================================================
-    // Go modules: manual review
+    // Base images: grouped in one PR
+    // Dashboard-Approval → PR triggers Build → PR closed
     // =====================================================
     {
-      "description": "Go modules: manual review",
-      "matchManagers": ["gomod"],
-      "groupName": "go dependencies",
-      "postUpdateOptions": ["gomodTidy"],
-      "automerge": false,
-      "labels": ["dependencies", "go"]
-    },
-    {
-      "description": "Go security updates: auto-merge",
-      "matchManagers": ["gomod"],
-      "matchCategories": ["security"],
-      "automerge": true,
-      "automergeType": "pr",
-      "labels": ["dependencies", "go", "security-vulnerability"]
-    },
-    {
-      "description": "minio-go: blocked until golang-builder:1.25-sles is available internally",
-      "matchPackageNames": ["github.com/minio/minio-go/v7"],
-      "allowedVersions": "< 7.0.99"
-    },
-    // =====================================================
-    // GitHub Actions
-    // =====================================================
-    {
-      "description": "GitHub Actions: major → manual review",
-      "matchManagers": ["github-actions"],
-      "matchUpdateTypes": ["major"],
-      "automerge": false,
-      "labels": ["dependencies", "github-actions"]
-    },
-    {
-      "description": "GitHub Actions: minor/patch/digest → auto-merge",
-      "matchManagers": ["github-actions"],
-      "matchUpdateTypes": ["minor", "patch", "digest"],
-      "automerge": true,
-      "automergeType": "pr",
-      "labels": ["dependencies", "github-actions"]
-    },
-    // =====================================================
-    // golang-builder: Digest-Update → PR triggers Build → PR closed
-    // Version update (1.24 → 1.25): manual review
-    // =====================================================
-    {
-      "description": "golang-builder: digest update → PR triggers Build → PR closed",
+      "description": "All base images: grouped Digest-Update → one PR → one Build",
       "matchManagers": ["dockerfile"],
-      "matchPackageNames": ["registry.idst.ibaintern.de/public/ibi/golang-builder"],
+      "matchPackageNames": ["golang", "alpine"],
       "matchUpdateTypes": ["digest", "pinDigest"],
+      "groupName": "base images",
       "pinDigests": true,
+      "dependencyDashboardApproval": true,
       "automerge": false,
       "recreateWhen": "always",
-      "labels": ["dependencies", "docker", "go-builder"]
+      "labels": ["dependencies", "docker", "base-image"]
     },
+    // =====================================================
+    // Version updates: separate PRs, manual review
+    // =====================================================
     {
-      "description": "golang-builder: version update (1.24 → 1.25) → manual review",
+      "description": "golang: version update → manual review",
       "matchManagers": ["dockerfile"],
-      "matchPackageNames": ["registry.idst.ibaintern.de/public/ibi/golang-builder"],
+      "matchPackageNames": ["golang"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "automerge": false,
       "labels": ["dependencies", "docker", "go-builder"]
     },
-    // =====================================================
-    // base:1-sles: disabled — updated via scheduled rebuild
-    // (Manfred's requirement: Dockerfile must never be modified)
-    // =====================================================
     {
-      "description": "base:1-sles: disabled — updated via scheduled docker build --pull",
+      "description": "alpine: version update → manual review",
       "matchManagers": ["dockerfile"],
-      "matchPackageNames": ["registry.idst.ibaintern.de/public/ibi/base"],
-      "enabled": false
+      "matchPackageNames": ["alpine"],
+      "matchUpdateTypes": ["major", "minor", "patch"],
+      "automerge": false,
+      "labels": ["dependencies", "docker", "base-image"]
     }
   ]
 }
